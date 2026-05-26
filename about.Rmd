@@ -1,0 +1,28 @@
+---
+title: "Hakkında"
+---
+
+## Proje
+
+Bu site, Türkiye'nin il, ilçe ve mahalle/köy idari sınırlarını Çevre,
+Şehircilik ve İklim Değişikliği Bakanlığı **TUCBS Public API** WMS servisi
+üzerinden interaktif olarak gösterir, ve bu sınırlara istatistik veri
+bindirip choropleth/cartogram üretmek isteyenlere R rehberi sunar.
+
+## Veri kaynağı
+
+- **WMS servisi:** `https://tucbs-public-api.csb.gov.tr/trk_afad_tdth_wms`
+- **Sağlayıcı:** T.C. Çevre, Şehircilik ve İklim Değişikliği Bakanlığı — Coğrafi Bilgi Sistemleri Genel Müdürlüğü
+- **Format:** OGC WMS 1.3.0
+- **Kullanılan katmanlar:** 67 (il), 68 (ilçe), 69 (mahalle/köy)
+
+## Lisans
+
+Sınır verileri kamu kurumu tarafından sunulmaktadır; kullanım koşulları için
+veri sahibi kurumun (CSB) ilgili sayfasına bakınız. Bu repodaki kod MIT
+lisansı altındadır.
+
+## İletişim / Katkı
+
+Sorular ve iyileştirme önerileri için repo'nun
+[Issues](../../issues) sekmesi.

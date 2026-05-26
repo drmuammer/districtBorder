@@ -1,0 +1,19 @@
+# R
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+*.Rcheck/
+
+# Knitr / Rmd
+*_cache/
+*_files/
+!docs/*_files/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Veri — büyük dosyalar (>50 MB) için Git LFS önerilir
+# Hassas veri varsa burada özel olarak ignore et:
+# data/private_*.csv

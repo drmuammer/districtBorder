@@ -1,0 +1,16 @@
+name: "boundaries"
+output_dir: "docs"
+navbar:
+  title: "Türkiye İdari Sınırlar"
+  left:
+    - text: "Harita"
+      href: index.html
+    - text: "Rehber: İstatistik Haritası"
+      href: guide.html
+    - text: "Hakkında"
+      href: about.html
+output:
+  html_document:
+    theme: flatly
+    highlight: tango
+    self_contained: true

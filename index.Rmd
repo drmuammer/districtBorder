@@ -1,0 +1,58 @@
+---
+title: "Türkiye İdari Sınırları — WMS Haritası"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+```{r packages}
+# Paketleri kontrol et / kur
+if (!requireNamespace("pacman", quietly = TRUE)) install.packages("pacman")
+pacman::p_load(leaflet, htmlwidgets)
+```
+
+Bu harita, Çevre, Şehircilik ve İklim Değişikliği Bakanlığı **TUCBS Public API** WMS
+servisinden gelen idari sınır katmanlarını gösterir. Haritayı yakınlaştırdıkça önce
+ilçe, sonra mahalle/köy sınırları görünür hale gelir.
+
+```{r map, out.width='100%', out.height='600px'}
+wms_url <- "https://tucbs-public-api.csb.gov.tr/trk_afad_tdth_wms"
+
+leaflet() |>
+  setView(lng = 35.0, lat = 39.0, zoom = 6) |>
+  addProviderTiles(providers$CartoDB.Positron, group = "Açık zemin") |>
+  addProviderTiles(providers$OpenStreetMap, group = "OSM") |>
+  # 67 = il, 68 = ilçe, 69 = mahalle/köy
+  addWMSTiles(
+    wms_url, layers = "67",
+    options = WMSTileOptions(format = "image/png", transparent = TRUE),
+    group = "İl sınırı"
+  ) |>
+  addWMSTiles(
+    wms_url, layers = "68",
+    options = WMSTileOptions(format = "image/png", transparent = TRUE),
+    group = "İlçe sınırı"
+  ) |>
+  addWMSTiles(
+    wms_url, layers = "69",
+    options = WMSTileOptions(format = "image/png", transparent = TRUE),
+    group = "Mahalle / Köy sınırı"
+  ) |>
+  addLayersControl(
+    baseGroups = c("Açık zemin", "OSM"),
+    overlayGroups = c("İl sınırı", "İlçe sınırı", "Mahalle / Köy sınırı"),
+    options = layersControlOptions(collapsed = FALSE)
+  )
+```
+
+**Katman ölçek eşikleri** (servisin GetCapabilities'inden):
+
+| Katman   | İçerik              | Min ölçek (yaklaşık zoom) |
+|----------|---------------------|---------------------------|
+| 67       | İl sınırı           | 1 : 9.250.000 (zoom ≥ 5)  |
+| 68       | İlçe sınırı         | 1 : 2.000.000 (zoom ≥ 7)  |
+| 69       | Mahalle/Köy sınırı  | 1 : 300.000  (zoom ≥ 10)  |
+
+> Verinin üzerine kendi istatistik verilerini bindirmek istiyorsan
+> **[Rehber: İstatistik Haritası](guide.html)** sayfasına bak.

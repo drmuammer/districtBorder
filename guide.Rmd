@@ -1,0 +1,249 @@
+---
+title: "Rehber: İdari Sınırlara İstatistik Veri Bağlamak"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.width = 9, fig.height = 6)
+```
+
+Bu rehber, idari sınır katmanlarının üzerine il/ilçe bazlı istatistik veriyi
+(nüfus, gelir, vaka sayısı, vs.) bindirip **choropleth** (renkli istatistik haritası)
+ve **cartogram** (alanı değere göre çarpıtılmış harita) üretmenin pratik yolunu
+anlatır.
+
+---
+
+## 1. Önce kavramları ayıralım: WMS vs Vektör
+
+Ana sayfadaki harita **WMS (Web Map Service)** kullanıyor. WMS sunucu sana
+hazır PNG karoları (tile) gönderir — yani sınırların **görüntüsünü** alırsın,
+**geometrisini** değil.
+
+> Bir ilçeyi nüfusuna göre renklendirmek için o ilçenin **poligonunun
+> koordinatlarına** ihtiyacın var. WMS bunu vermez; WFS (Web Feature Service)
+> ya da yerel bir GeoJSON/Shapefile verir.
+
+Dolayısıyla pratik akış şöyle olur:
+
+```
+WMS  →  Görsel arka plan / referans katmanı (her zoom için optimize)
+Vektör (sf) →  Veriyle eşleştirilip renklendirilen ana katman
+```
+
+İkisini aynı haritada birleştireceğiz: vektör sınırları biz çizip
+boyayacağız, WMS'i altlık olarak bırakabiliriz (ya da hiç kullanmayız).
+
+---
+
+## 2. İl/İlçe vektör sınırlarını nereden alalım?
+
+Birkaç pratik kaynak:
+
+| Kaynak | Seviye | Kullanım |
+|---|---|---|
+| `geodata::gadm()` | İl, ilçe | Tek satırda R'den indirilir, en kolayı |
+| `rnaturalearth` | Sadece il (kaba) | Hızlı, küçük dosya |
+| TUİK / e-İçişleri shapefile | İl, ilçe, mahalle | En resmi, manuel indirme |
+| OSM (`osmdata`) | Her seviye | Esnek ama sorgu yazmak gerek |
+
+Bu rehberde **GADM** ile gideceğiz (en az sürtünme).
+
+```{r install, eval=FALSE}
+install.packages(c("geodata", "sf", "dplyr", "leaflet", "tmap"))
+# Cartogram örneği için:
+install.packages("cartogram")
+```
+
+```{r load-pkg}
+library(sf)
+library(dplyr)
+library(leaflet)
+```
+
+---
+
+## 3. Veriyi Hazırlamak: 3 Adım
+
+### Adım 1 — Sınırları indir
+
+```{r load-boundaries, eval=FALSE}
+library(geodata)
+
+# Level 1 = il, Level 2 = ilçe
+tr_il <- geodata::gadm(country = "TUR", level = 1, path = "data") |>
+  sf::st_as_sf()
+
+# tr_il içinde NAME_1 = il adı, geometry = poligon
+head(tr_il[, c("NAME_1", "geometry")])
+```
+
+### Adım 2 — Kendi verini hazırla
+
+CSV'den okuyabilir ya da elle yazabilirsin. Önemli olan **il adının** sınır
+verisindeki adla **bire bir uyuşması**. Türkçe karakter ve büyük/küçük harf
+tuzakları için aşağıdaki gibi bir normalizasyon faydalı olur.
+
+```{r sample-data, eval=FALSE}
+# Örnek: 2023 nüfus (TÜİK'ten alındığını varsayalım)
+nufus <- read.csv("data/il_nufus_2023.csv")  # sütunlar: il, nufus
+
+# İsim uyumu için normalleştir
+norm_ad <- function(x) {
+  x |>
+    tolower() |>
+    gsub("i\\u0307", "i", x = _) |>           # noktalı i
+    chartr("çğıöşü", "cgiosu", x = _) |>
+    trimws()
+}
+
+tr_il$key  <- norm_ad(tr_il$NAME_1)
+nufus$key  <- norm_ad(nufus$il)
+```
+
+### Adım 3 — Birleştir
+
+```{r join, eval=FALSE}
+harita_df <- tr_il |>
+  left_join(nufus, by = "key")
+
+# Uymayanları kontrol et — sıfır olmalı
+sum(is.na(harita_df$nufus))
+```
+
+---
+
+## 4. Choropleth — Leaflet ile İnteraktif
+
+```{r choropleth-leaflet, eval=FALSE}
+# Renk paleti
+pal <- colorBin(
+  palette = "YlOrRd",
+  domain  = harita_df$nufus,
+  bins    = c(0, 250e3, 500e3, 1e6, 2e6, 5e6, 20e6)
+)
+
+# Üzerine fareyle gelince çıkan etiket
+labels <- sprintf(
+  "<b>%s</b><br/>Nüfus: %s",
+  harita_df$NAME_1, format(harita_df$nufus, big.mark = ".")
+) |> lapply(htmltools::HTML)
+
+leaflet(harita_df) |>
+  setView(lng = 35.0, lat = 39.0, zoom = 6) |>
+  addProviderTiles(providers$CartoDB.Positron) |>
+  # WMS'i altlık/referans olarak da ekleyebilirsin:
+  # addWMSTiles("https://tucbs-public-api.csb.gov.tr/trk_afad_tdth_wms",
+  #             layers = "67",
+  #             options = WMSTileOptions(format = "image/png", transparent = TRUE)) |>
+  addPolygons(
+    fillColor   = ~pal(nufus),
+    weight      = 1,
+    color       = "white",
+    fillOpacity = 0.75,
+    highlightOptions = highlightOptions(weight = 3, color = "#333",
+                                        bringToFront = TRUE),
+    label       = labels
+  ) |>
+  addLegend(pal = pal, values = ~nufus, position = "bottomright",
+            title = "Nüfus (2023)")
+```
+
+---
+
+## 5. Choropleth — Statik (yayın kalitesi) `tmap` ile
+
+İnteraktif değil ama makaleye/rapora koymaya uygun çıktı:
+
+```{r choropleth-tmap, eval=FALSE}
+library(tmap)
+
+tmap_mode("plot")  # "view" dersen leaflet'e benzer interaktif olur
+
+tm_shape(harita_df) +
+  tm_polygons(
+    col = "nufus",
+    style = "quantile",         # ya da "jenks", "equal", "fixed"
+    n = 6,
+    palette = "YlOrRd",
+    title = "Nüfus (2023)",
+    border.col = "white", lwd = 0.4
+  ) +
+  tm_layout(
+    frame = FALSE,
+    legend.outside = TRUE,
+    main.title = "Türkiye İl Bazında Nüfus",
+    main.title.size = 1.1
+  )
+```
+
+---
+
+## 6. Gerçek Cartogram (alanı değere göre çarpıtma)
+
+"Kartogram" sözünü iki anlamda kullanıyoruz:
+
+- **Choropleth** (renkli istatistik haritası) — yukarıdaki örnekler.
+- **Cartogram** (alan çarpıtma) — il yüzölçümü, değere göre büyür/küçülür.
+
+İkincisi için `cartogram` paketi:
+
+```{r cartogram, eval=FALSE}
+library(cartogram)
+
+# Önce projeksiyon — cartogram metrik bir CRS ister
+tr_proj <- sf::st_transform(harita_df, crs = 3857)
+
+# "Continuous" cartogram (Dougenik) — alanlar nüfusla orantılı olacak şekilde gerilir
+tr_cart <- cartogram_cont(tr_proj, weight = "nufus", itermax = 7)
+
+tm_shape(tr_cart) +
+  tm_polygons("nufus", palette = "YlOrRd", style = "quantile") +
+  tm_layout(frame = FALSE, legend.outside = TRUE,
+            main.title = "Nüfusa göre boyutlandırılmış iller")
+```
+
+Dougenik dışında alternatifler: `cartogram_dorling()` (her ili daire yapar),
+`cartogram_ncont()` (alan korumacı, kaymadan boyutlandırır).
+
+---
+
+## 7. İlçe Seviyesine İnmek
+
+Aynı yöntem ilçe için de çalışır — sadece level 2:
+
+```{r ilce, eval=FALSE}
+tr_ilce <- geodata::gadm(country = "TUR", level = 2, path = "data") |>
+  sf::st_as_sf()
+# NAME_1 = il, NAME_2 = ilçe — eşleşme için iki alana göre join yap:
+# left_join(by = c("NAME_1" = "il", "NAME_2" = "ilce"))
+```
+
+Mahalle/köy seviyesinde GADM yok; o seviye için TUİK ya da MAKS verisi gerekir.
+WMS katman 69 sadece görsel olarak gösterir, vektör vermez.
+
+---
+
+## 8. Sık Karşılaşılan Sorunlar
+
+- **`sum(is.na(...))` sıfır değil** — il adlarında imla farkı vardır
+  (Afyonkarahisar/Afyon, Şanlıurfa/Urfa). `dplyr::anti_join()` ile uymayanları
+  listele, manuel eşleştir.
+- **Harita boş çıkıyor** — projeksiyon uyumsuzluğu. `sf::st_transform(4326)`
+  ile leaflet'in beklediği CRS'e çevir.
+- **WMS yavaş** — Katman 69 mahalle çok detaylı, küçük zoom'da çekme; ölçek
+  eşikleri zaten servis tarafında ayarlı.
+- **Cartogram tuhaf çıktı verdi** — `itermax` artır (10–15), aşırı küçük
+  iller (örn. Yalova) yamulabilir, dorling alternatifi daha stabil olabilir.
+
+---
+
+## 9. Kaynak Önerileri
+
+- Servis dokümanı: https://cbs.csb.gov.tr/
+- GADM (vektör sınırlar): https://gadm.org/
+- TÜİK veri: https://data.tuik.gov.tr/
+- `sf` paketi: https://r-spatial.github.io/sf/
+- `leaflet` for R: https://rstudio.github.io/leaflet/
+- `tmap` v4: https://r-tmap.github.io/tmap/
+- `cartogram` paketi: https://cran.r-project.org/package=cartogram
